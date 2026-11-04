@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>KBTEST[] WhatsApp</title>
+<style>
+  body { font: 16px 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+  #log { flex: 1; padding: 16px; }
+  .msg { margin: 8px 0; padding: 8px 12px; background: #e9f5ee; border-radius: 8px; width: fit-content; }
+  .msg.me { margin-left: auto; background: #d9fdd3; }
+  .time { display: block; font-size: 12px; text-align: right; }
+  #bar { padding: 12px; border-top: 1px solid #bbb; }
+  #box { min-height: 24px; padding: 8px; border: 1px solid #888; border-radius: 8px; outline: 0; white-space: pre-wrap; }
+  #pw { margin-top: 8px; }
+</style>
+<div id="log" role="log">
+  <div class="msg">Are you coming to Ali's birthday party tonight?<span class="time">6:40 pm</span></div>
+  <div class="msg">It starts at 8, can you bring the cake?<span class="time">6:41 pm</span></div>
+</div>
+<div id="bar">
+  <!-- Built the way WhatsApp Web builds its message box. -->
+  <div id="box" contenteditable="true" role="textbox" aria-label="Type a message" tabindex="0"></div>
+  <input id="pw" type="password" aria-label="Password" />
+</div>
+<script>
+  const box = document.getElementById('box');
+  let sent = 0;
+  function report() {
+    document.title = 'KBTEST[' + box.innerText.replace(/\n/g, '\\n') + ']SENT[' + sent + '] WhatsApp';
+  }
+  // Test keys: F9 is a new incoming message, F10 is a message from me.
+  function add(text, mine) {
+    const m = document.createElement('div');
+    m.className = mine ? 'msg me' : 'msg';
+    m.textContent = text;
+    const time = document.createElement('span');
+    time.className = 'time';
+    time.textContent = '6:42 pm';
+    m.append(time);
+    document.getElementById('log').append(m);
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'F9') add('Also, can you send me the address of your office?', false);
+    if (e.key === 'F10') add('On my way, see you soon', true);
+  });
+  box.addEventListener('input', report);
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sent++; report(); }
+  });
+  box.focus();
+</script>

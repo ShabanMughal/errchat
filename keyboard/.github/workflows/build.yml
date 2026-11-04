@@ -1,0 +1,49 @@
+# Builds and tests every push. A tag like v0.1.0 also publishes the exe as a release.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
+
+      - name: Self-test
+        shell: powershell
+        run: |
+          $run = Start-Process dist\ErrChatKeyboard.exe --selftest -Wait -PassThru -RedirectStandardOutput selftest.txt
+          Get-Content selftest.txt
+          exit $run.ExitCode
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ErrChatKeyboard
+          path: dist/ErrChatKeyboard.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ErrChatKeyboard
+      - name: Publish
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME ErrChatKeyboard.exe --repo $env:GITHUB_REPOSITORY --generate-notes

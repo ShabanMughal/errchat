@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>ErrChat</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar" aria-label="Conversations">
+        <div class="sidebar-top">
+          <button id="new-chat" class="btn" type="button" title="New chat (Ctrl+N)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            New chat
+          </button>
+        </div>
+        <nav id="chat-list"></nav>
+        <section id="accounts" aria-label="Accounts"></section>
+      </aside>
+      <div id="scrim" hidden></div>
+
+      <main id="main">
+        <header id="topbar">
+          <button id="menu" class="icon-btn" type="button" aria-label="Show conversations">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <h1 id="title"></h1>
+        </header>
+
+        <section id="messages" aria-label="Messages"></section>
+
+        <form id="composer" autocomplete="off">
+          <div class="composer-box">
+            <label id="input-label" for="input"></label>
+            <textarea id="input" rows="1" placeholder="Enter to send, Shift+Enter for a new line"></textarea>
+            <div class="composer-tools">
+              <div id="provider-picker" role="radiogroup" aria-label="Provider"></div>
+              <label class="model-field">
+                <span>Model</span>
+                <select id="model"></select>
+              </label>
+              <span class="spacer"></span>
+              <button id="send" class="btn primary" type="submit">Send</button>
+            </div>
+          </div>
+          <div id="composer-note" role="status"></div>
+        </form>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
