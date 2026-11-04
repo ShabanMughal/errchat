@@ -38,8 +38,8 @@ The strip and the settings window follow your Windows light or dark mode.
 
 You need Windows 10 or 11. Windows 11 adds the rounded corners.
 
-1. Download `ErrChatKeyboard.exe` from the [latest release](../../releases/latest) and
-   run it. No installer or admin rights are needed. The app isn't code-signed, so
+1. Download `ErrChatKeyboard.exe` from the [Releases page](https://github.com/ShabanMughal/errchat/releases)
+   and run it. If no release is listed yet, build it from source as shown below. No installer or admin rights are needed. The app isn't code-signed, so
    Windows SmartScreen may warn you the first time.
 2. For grammar fixes and smart replies, install at least one of these and sign in:
    - [Claude Code](https://docs.anthropic.com/en/docs/claude-code), which provides the `claude` command
@@ -50,6 +50,8 @@ Word suggestions work without either one.
 To get shortcuts and an entry in Windows **Installed apps**, build from source instead:
 
 ```powershell
+git clone https://github.com/ShabanMughal/errchat.git
+cd errchat
 powershell -ExecutionPolicy Bypass -File build.ps1
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```

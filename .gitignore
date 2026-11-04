@@ -1,7 +1,2 @@
-node_modules/
-extension/dist/
-chat-app/dist/
-chat-app/release/
-.venv/
-__pycache__/
-*.egg-info/
+dist/
+*.pdb
