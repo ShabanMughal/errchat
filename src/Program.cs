@@ -213,7 +213,9 @@ namespace ErrChatKeyboard
 
         void BuildTray()
         {
-            tray.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            // The tray needs the small version: shrinking the large one blurs it.
+            using (var stream = typeof(Controller).Assembly.GetManifestResourceStream("icon.ico"))
+                tray.Icon = new Icon(stream, SystemInformation.SmallIconSize);
             tray.Text = "ErrChat Keyboard";
             tray.Visible = true;
             tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowSettings(); };

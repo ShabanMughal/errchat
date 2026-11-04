@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force dist | Out-Null
 $refs = 'System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll',
   'WPF\UIAutomationClient.dll','WPF\UIAutomationTypes.dll','WPF\WindowsBase.dll' | ForEach-Object { "/r:$fw\$_" }
 $out = & "$fw\csc.exe" /nologo /target:winexe /optimize+ /platform:x64 /out:dist\ErrChatKeyboard.exe `
-  /win32manifest:app.manifest /win32icon:icon.ico /res:data\words.txt,words.txt /res:data\next.txt,next.txt `
+  /win32manifest:app.manifest /win32icon:icon.ico /res:data\words.txt,words.txt /res:data\next.txt,next.txt /res:icon.ico,icon.ico `
   $refs (Get-ChildItem src\*.cs | ForEach-Object FullName) 2>&1
 $code = $LASTEXITCODE
 $out | Where-Object { $_ -notmatch 'This compiler is provided|C# 5|csc.exe|no longer the latest|go.microsoft.com' }

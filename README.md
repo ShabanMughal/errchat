@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" alt="ErrChat Keyboard logo" width="128" height="128"></p>
+
 # ErrChat Keyboard
 
 Phone-keyboard suggestions, grammar fixes and smart chat replies for Windows, in the
