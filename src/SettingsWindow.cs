@@ -20,6 +20,8 @@ namespace ErrChatKeyboard
         bool StartsWithWindows { get; }
         void SetStartWithWindows(bool on);
         void ForgetLearnedWords();
+        bool PositionIsCustom { get; }
+        void ResetPosition();
         void Quit();
     }
 
@@ -244,7 +246,7 @@ namespace ErrChatKeyboard
         Font titleFont, headingFont, bodyFont, strongFont, smallFont;
         Card claudeCard, codexCard;
         Caption providerNote, grammarNote, repliesNote;
-        Button signIn;
+        Button signIn, resetPosition;
 
         public SettingsWindow(ISettingsHost settingsHost, bool showWithoutFocus = false)
         {
@@ -311,6 +313,7 @@ namespace ErrChatKeyboard
         {
             base.OnActivated(e);
             if (claudeCard != null) UpdateProvider(); // the CLI may have been installed meanwhile
+            if (resetPosition != null) resetPosition.Enabled = host.PositionIsCustom; // or the badge dragged
         }
 
         int S(float px) { return (int)Math.Round(px * scale); }
@@ -376,7 +379,19 @@ namespace ErrChatKeyboard
             // Shortcuts.
             y = AddText("Keyboard shortcuts", headingFont, theme.Text, left, y, width).Bottom + S(12);
             y = AddShortcut("Insert suggestion 1, 2 or 3", "Alt+1  Alt+2  Alt+3", left, y, width) + S(8);
-            y = AddShortcut("Apply a grammar fix", "Ctrl+Alt+F", left, y, width) + S(24);
+            y = AddShortcut("Apply a grammar fix", "Ctrl+Alt+F", left, y, width) + S(8);
+            y = AddShortcut("Open or close the strip", "Ctrl+Alt+Space", left, y, width) + S(24);
+
+            // Position.
+            y = AddText("Badge and strip", headingFont, theme.Text, left, y, width).Bottom + S(12);
+            var placeNote = AddText("Click the badge to open the strip. Drag either one to place it anywhere on screen.", smallFont, theme.Muted, left, y, width - buttonWidth - S(16), 2);
+            resetPosition = AddButton("Reset position", left + width - buttonWidth, y, buttonWidth, () =>
+            {
+                host.ResetPosition();
+                resetPosition.Enabled = false;
+            });
+            resetPosition.Enabled = host.PositionIsCustom;
+            y = Math.Max(placeNote.Bottom, resetPosition.Bottom) + S(24);
 
             // Footer.
             int forgetWidth = S(176), quitWidth = S(112);

@@ -33,7 +33,9 @@ Before opening a pull request:
 1. Run `--selftest`, and add checks for any logic you change.
 2. For a visual change, run `--preview <folder>` and look at the images, in both light
    and dark. Update the images in `docs/` if the look changed.
-3. If you changed focus, typing, chat reading or AI calls, run `test\e2e.ps1`. It takes
+3. If you changed the badge or the strip, run `--check-panel`. It moves your mouse for a
+   few seconds, so leave it alone while it runs.
+4. If you changed focus, typing, chat reading or AI calls, run `test\e2e.ps1`. It takes
    over the keyboard and mouse for a few minutes and uses a little of your AI plan, so
    leave the PC alone while it runs.
 

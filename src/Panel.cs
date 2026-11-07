@@ -1,5 +1,6 @@
-// The floating suggestion strip. It never takes focus, so clicking a chip leaves
-// the caret where it is in the app being typed in.
+// The floating helper: a small badge in the corner of the box, which opens into the
+// suggestion strip. It never takes focus, so clicking it leaves the caret where it is
+// in the app being typed in.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -100,7 +101,7 @@ namespace ErrChatKeyboard
         const int WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x80, WS_EX_TOPMOST = 0x8;
         const int WM_MOUSEACTIVATE = 0x21, MA_NOACTIVATE = 3, WM_HOTKEY = 0x312;
         const int MOD_ALT = 1, MOD_CONTROL = 2, MOD_NOREPEAT = 0x4000, CS_DROPSHADOW = 0x20000;
-        const int HotkeyWords = 1, HotkeyFix = 10;
+        const int HotkeyWords = 1, HotkeyFix = 10, HotkeyStrip = 11;
         const int SW_SHOWNOACTIVATE = 4, SW_HIDE = 0;
         const uint SWP_NOACTIVATE = 0x10, SWP_NOZORDER = 0x4;
         static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
@@ -122,18 +123,26 @@ namespace ErrChatKeyboard
         bool hotkeysOn;
         bool roundedByWindows;
         string signature = "";
-        Rectangle lastAnchor;
+        Rectangle lastAnchor, lastCaret;
+        bool expanded, badgeHot, dragging, swallowUp;
+        Point pressCursor, pressWindow;
         float scale = 1f;
         float spinAngle;
         Font font, smallFont, strongFont;
         readonly ToolTip tip = new ToolTip();
         readonly Timer spinTimer = new Timer { Interval = 50 };
+        readonly Timer dragTimer = new Timer { Interval = 15 };
 
         public Action<int> HotkeyWord;
         public Action HotkeyApplyFix;
+        /// <summary>Where the user dragged each one; null follows the box.</summary>
+        public Point? BadgePin, StripPin;
+        /// <summary>Called when a drag ends, so the new position can be saved.</summary>
+        public Action Moved;
+        public Action HideForBox;
 
         const float FontPx = 14, SmallPx = 12, ChipHeight = 32, Gap = 8, Pad = 8, ChipPad = 12, IconSize = 14, InnerGap = 8, NoteHeight = 20, Radius = 8;
-        const int MaxWidth = 720;
+        const int MaxWidth = 720, BadgeSize = 28, BadgeInset = 4, DragStart = 4, ScreenMargin = 8;
         // Native Windows text drawing: unlike GDI+, it falls back to Segoe UI Emoji for emoji.
         const TextFormatFlags TextFlags = TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
         // Measuring with the ellipsis flag on returns widths too small for the text.
@@ -151,8 +160,10 @@ namespace ErrChatKeyboard
             spinTimer.Tick += (s, e) =>
             {
                 spinAngle = (spinAngle + 30) % 360;
+                if (!expanded) { Invalidate(); return; }
                 foreach (var chip in laidOut.Where(c => c.Kind == ChipKind.Status)) Invalidate(Rectangle.Ceiling(chip.Bounds));
             };
+            dragTimer.Tick += (s, e) => TrackDrag();
             var _ = Handle; // create it now so hotkeys and updates work while hidden
             roundedByWindows = Dwm.RoundCorners(Handle);
         }
@@ -187,6 +198,7 @@ namespace ErrChatKeyboard
             {
                 int id = m.WParam.ToInt32();
                 if (id == HotkeyFix) { if (HotkeyApplyFix != null) HotkeyApplyFix(); }
+                else if (id == HotkeyStrip) SetExpanded(!expanded);
                 else if (HotkeyWord != null) HotkeyWord(id - HotkeyWords);
                 return;
             }
@@ -202,8 +214,16 @@ namespace ErrChatKeyboard
                 if (on) RegisterHotKey(Handle, HotkeyWords + i, MOD_ALT | MOD_NOREPEAT, (int)Keys.D1 + i);
                 else UnregisterHotKey(Handle, HotkeyWords + i);
             }
-            if (on) RegisterHotKey(Handle, HotkeyFix, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, (int)Keys.F);
-            else UnregisterHotKey(Handle, HotkeyFix);
+            if (on)
+            {
+                RegisterHotKey(Handle, HotkeyFix, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, (int)Keys.F);
+                RegisterHotKey(Handle, HotkeyStrip, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, (int)Keys.Space);
+            }
+            else
+            {
+                UnregisterHotKey(Handle, HotkeyFix);
+                UnregisterHotKey(Handle, HotkeyStrip);
+            }
         }
 
         /// <summary>For the end-to-end test only: logs how the chat was read.</summary>
@@ -229,10 +249,36 @@ namespace ErrChatKeyboard
             if (shown) { signature = ""; Trace("(hidden)"); }
             SetHotkeys(false);
             spinTimer.Stop();
+            dragTimer.Stop();
+            dragging = false;
+            badgeHot = false;
             tip.Hide(this);
             if (!shown) return;
             shown = false;
             ShowWindow(Handle, SW_HIDE);
+        }
+
+        public bool Expanded { get { return expanded; } }
+
+        /// <summary>Switches between the badge and the full strip.</summary>
+        public void SetExpanded(bool value)
+        {
+            if (value == expanded) return;
+            expanded = value;
+            hover = null;
+            badgeHot = false;
+            tip.Hide(this);
+            if (!shown) return;
+            Arrange();
+            Invalidate();
+        }
+
+        /// <summary>Goes back to following the box.</summary>
+        public void ClearPins()
+        {
+            BadgePin = null;
+            StripPin = null;
+            signature = "";
         }
 
         static string TraceName(Chip chip) { return chip.Kind == ChipKind.Fix ? "Fix: " + chip.Text : chip.Text; }
@@ -247,6 +293,7 @@ namespace ErrChatKeyboard
             row2 = second;
             note = noteText;
             noteIsError = noteError;
+            lastCaret = caret;
             if (same) { SyncClicks(); return; }
             signature = sig;
             lastAnchor = anchor;
@@ -256,9 +303,9 @@ namespace ErrChatKeyboard
             float newScale = dpi > 0 ? dpi / 96f : 1f;
             if (Math.Abs(newScale - scale) > 0.01f) { scale = newScale; SetFonts(); }
             tip.Hide(this);
-            LayoutChips(anchor, caret);
+            Arrange();
             SetHotkeys(true);
-            spinTimer.Enabled = laidOut.Any(c => c.Kind == ChipKind.Status);
+            spinTimer.Enabled = first.Concat(second).Any(c => c.Kind == ChipKind.Status);
             Invalidate();
             if (!shown)
             {
@@ -292,7 +339,72 @@ namespace ErrChatKeyboard
             return w;
         }
 
-        void LayoutChips(Rectangle anchor, Rectangle caret)
+        void Arrange()
+        {
+            if (expanded) LayoutChips();
+            else LayoutBadge();
+        }
+
+        int BadgePixels { get { return (int)Math.Round(BadgeSize * scale); } }
+
+        void LayoutBadge()
+        {
+            int size = BadgePixels;
+            Point at = BadgePin.HasValue
+                ? Clamped(BadgePin.Value, new Size(size, size))
+                : BadgeSpot(lastAnchor, size, (int)Math.Round(BadgeInset * scale), Screen.FromRectangle(lastAnchor).WorkingArea);
+            Place(at, size, size);
+            laidOut = new List<Chip>();
+        }
+
+        /// <summary>The bottom right corner inside the box, like Grammarly; centered in a one-line box.</summary>
+        public static Point BadgeSpot(Rectangle box, int size, int inset, Rectangle area)
+        {
+            if (box.IsEmpty) box = area;
+            // Only the part on screen counts: a long document runs past the bottom.
+            var visible = Rectangle.Intersect(box, area);
+            if (visible.IsEmpty) visible = box;
+            int y = visible.Height < size * 2 ? visible.Top + (visible.Height - size) / 2 : visible.Bottom - size - inset;
+            return KeepInside(new Point(visible.Right - size - inset, y), new Size(size, size), area);
+        }
+
+        public static Point KeepInside(Point at, Size size, Rectangle area)
+        {
+            return new Point(
+                Math.Max(area.Left + ScreenMargin, Math.Min(at.X, area.Right - size.Width - ScreenMargin)),
+                Math.Max(area.Top + ScreenMargin, Math.Min(at.Y, area.Bottom - size.Height - ScreenMargin)));
+        }
+
+        // A saved position can be on a monitor that has since been unplugged.
+        static Point Clamped(Point at, Size size)
+        {
+            return KeepInside(at, size, Screen.FromRectangle(new Rectangle(at, size)).WorkingArea);
+        }
+
+        void Place(Point at, int width, int height)
+        {
+            if (dragging) at = Location;
+            SetWindowPos(Handle, HWND_TOPMOST, at.X, at.Y, width, height, SWP_NOACTIVATE);
+        }
+
+        Point StripSpot(int width, int h)
+        {
+            var size = new Size(width, h);
+            if (StripPin.HasValue) return Clamped(StripPin.Value, size);
+            var anchor = lastAnchor;
+            var caret = lastCaret;
+            // A badge dragged elsewhere takes the strip with it.
+            if (BadgePin.HasValue) anchor = caret = new Rectangle(BadgePin.Value, new Size(BadgePixels, BadgePixels));
+            var area = Screen.FromRectangle(anchor).WorkingArea;
+            int left = Math.Max(area.Left + 8, Math.Min(anchor.Left, area.Right - width - 8));
+            // Sit just above the box; in a tall box (a document) sit above the caret line instead.
+            int reference = anchor.Height > 200 * scale ? caret.Top : anchor.Top;
+            int top = reference - h - (int)(8 * scale);
+            if (top < area.Top + 8) top = Math.Min((anchor.Height > 200 * scale ? caret.Bottom : anchor.Bottom) + (int)(8 * scale), area.Bottom - h - 8);
+            return new Point(left, top);
+        }
+
+        void LayoutChips()
         {
             using (var g = CreateGraphics())
             {
@@ -357,13 +469,7 @@ namespace ErrChatKeyboard
                 }
                 int h = (int)Math.Ceiling(bottom + pad);
 
-                var area = Screen.FromRectangle(anchor).WorkingArea;
-                int left = Math.Max(area.Left + 8, Math.Min(anchor.Left, area.Right - width - 8));
-                // Sit just above the box; in a tall box (a document) sit above the caret line instead.
-                int reference = anchor.Height > 200 * scale ? caret.Top : anchor.Top;
-                int top = reference - h - (int)(8 * scale);
-                if (top < area.Top + 8) top = Math.Min((anchor.Height > 200 * scale ? caret.Bottom : anchor.Bottom) + (int)(8 * scale), area.Bottom - h - 8);
-                SetWindowPos(Handle, HWND_TOPMOST, left, top, width, h, SWP_NOACTIVATE);
+                Place(StripSpot(width, h), width, h);
             }
             laidOut = row1.Concat(row2).ToList();
         }
@@ -372,12 +478,52 @@ namespace ErrChatKeyboard
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            if (!expanded)
+            {
+                DrawBadge(g);
+                return;
+            }
             g.Clear(theme.Background);
             if (!roundedByWindows)
                 using (var pen = new Pen(theme.Frame)) g.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
 
             foreach (var chip in laidOut) DrawChip(g, chip);
             DrawNote(g);
+        }
+
+        int ReadyCount { get { return row1.Concat(row2).Count(c => c.Kind == ChipKind.Reply || c.Kind == ChipKind.Fix); } }
+        bool HasProblem { get { return noteIsError && !string.IsNullOrEmpty(note); } }
+        Chip BusyChip { get { return row1.Concat(row2).FirstOrDefault(c => c.Kind == ChipKind.Status); } }
+
+        /// <summary>Shows at a glance whether opening the strip is worth it: a warning, a spinner, or a count.</summary>
+        void DrawBadge(Graphics g)
+        {
+            int count = ReadyCount;
+            bool problem = HasProblem, busy = BusyChip != null;
+            bool filled = count > 0 && !problem && !busy;
+            Color back = filled ? (badgeHot ? theme.AccentHover : theme.Accent) : badgeHot ? theme.ChipHover : theme.Background;
+            g.Clear(back);
+            if (!roundedByWindows)
+                using (var pen = new Pen(theme.Frame)) g.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+
+            var area = new RectangleF(0, 0, ClientSize.Width, ClientSize.Height);
+            float x = (ClientSize.Width - IconSize * scale) / 2;
+            if (problem) DrawWarning(g, x, area);
+            else if (busy) DrawSpinner(g, x, area);
+            else if (filled) TextRenderer.DrawText(g, count.ToString(), strongFont, ClientRectangle, theme.OnAccent, back, TextFlags | TextFormatFlags.HorizontalCenter);
+            else DrawSpark(g, x, area);
+        }
+
+        string BadgeTip()
+        {
+            string state;
+            int count = ReadyCount;
+            var busy = BusyChip;
+            if (HasProblem) state = note;
+            else if (busy != null) state = busy.Text;
+            else if (count > 0) state = count == 1 ? "1 suggestion ready" : count + " suggestions ready";
+            else state = "ErrChat Keyboard";
+            return state + "\nClick to open (Ctrl+Alt+Space). Drag to move.\nRight-click to hide for this box.";
         }
 
         void DrawChip(Graphics g, Chip chip)
@@ -517,13 +663,70 @@ namespace ErrChatKeyboard
             return laidOut.FirstOrDefault(c => c.Click != null && c.Bounds.Contains(p));
         }
 
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            swallowUp = false;
+            pressCursor = Cursor.Position;
+            pressWindow = Location;
+            dragTimer.Start();
+        }
+
+        // Follows the real cursor on a timer: a window that isn't in front only gets mouse
+        // messages while the cursor is over it, and a fast drag can leave it behind.
+        void TrackDrag()
+        {
+            if ((MouseButtons & MouseButtons.Left) == 0)
+            {
+                dragTimer.Stop();
+                // The release normally arrives as a message first. This covers one that never does.
+                if (dragging) { EndDrag(); swallowUp = true; }
+                return;
+            }
+            var now = Cursor.Position;
+            int dx = now.X - pressCursor.X, dy = now.Y - pressCursor.Y;
+            if (!dragging)
+            {
+                if (Math.Max(Math.Abs(dx), Math.Abs(dy)) < DragStart * scale) return;
+                dragging = true;
+                hover = null;
+                badgeHot = false;
+                tip.Hide(this);
+                Cursor = Cursors.SizeAll;
+                Invalidate();
+            }
+            var at = Clamped(new Point(pressWindow.X + dx, pressWindow.Y + dy), Size);
+            SetWindowPos(Handle, HWND_TOPMOST, at.X, at.Y, Width, Height, SWP_NOACTIVATE);
+        }
+
+        void EndDrag()
+        {
+            dragging = false;
+            dragTimer.Stop();
+            if (expanded) StripPin = Location;
+            else BadgePin = Location;
+            signature = ""; // it may be on a monitor with a different scale now
+            if (Moved != null) Moved();
+        }
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            if (dragging) return;
+            if (!expanded)
+            {
+                if (badgeHot) return;
+                badgeHot = true;
+                Cursor = Cursors.Hand;
+                Invalidate();
+                tip.Show(BadgeTip(), this, 0, Height + (int)(4 * scale), 6000);
+                return;
+            }
             var chip = HitTest(e.Location);
+            // Anywhere else on the strip is a place to drag it from.
+            Cursor = chip != null ? Cursors.Hand : Cursors.SizeAll;
             if (chip != hover)
             {
                 hover = chip;
-                Cursor = chip != null ? Cursors.Hand : Cursors.Default;
                 Invalidate();
                 tip.Hide(this);
                 if (chip != null && chip.Tip != null)
@@ -534,11 +737,22 @@ namespace ErrChatKeyboard
         protected override void OnMouseLeave(EventArgs e)
         {
             tip.Hide(this);
+            if (badgeHot) { badgeHot = false; Invalidate(); }
             if (hover != null) { hover = null; Invalidate(); }
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (e.Button == MouseButtons.Right)
+            {
+                if (HideForBox != null) HideForBox();
+                return;
+            }
+            if (e.Button != MouseButtons.Left) return;
+            dragTimer.Stop();
+            if (swallowUp) { swallowUp = false; return; }
+            if (dragging) { EndDrag(); return; }
+            if (!expanded) { SetExpanded(true); return; }
             var chip = HitTest(e.Location);
             if (chip != null) chip.Click();
         }

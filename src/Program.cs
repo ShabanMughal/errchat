@@ -16,6 +16,8 @@ namespace ErrChatKeyboard
         public bool AutoGrammar = true;
         public bool LearnWords = true;
         public bool AutoReplies = true;
+        /// <summary>Where the badge and strip were dragged to; null follows the box.</summary>
+        public Point? BadgeAt, StripAt;
         readonly string file;
 
         public Settings(string path)
@@ -32,22 +34,35 @@ namespace ErrChatKeyboard
                     if (p[0] == "autoGrammar") AutoGrammar = p[1] == "true";
                     if (p[0] == "learnWords") LearnWords = p[1] == "true";
                     if (p[0] == "autoReplies") AutoReplies = p[1] == "true";
+                    if (p[0] == "badgeAt") BadgeAt = ParsePoint(p[1]);
+                    if (p[0] == "stripAt") StripAt = ParsePoint(p[1]);
                 }
             }
             catch (IOException) { }
+        }
+
+        static Point? ParsePoint(string text)
+        {
+            var parts = text.Split(',');
+            int x, y;
+            if (parts.Length == 2 && int.TryParse(parts[0], out x) && int.TryParse(parts[1], out y)) return new Point(x, y);
+            return null;
         }
 
         public void Save()
         {
             try
             {
-                File.WriteAllLines(file, new[]
+                var lines = new List<string>
                 {
                     "provider=" + Provider,
                     "autoGrammar=" + (AutoGrammar ? "true" : "false"),
                     "learnWords=" + (LearnWords ? "true" : "false"),
                     "autoReplies=" + (AutoReplies ? "true" : "false")
-                });
+                };
+                if (BadgeAt.HasValue) lines.Add("badgeAt=" + BadgeAt.Value.X + "," + BadgeAt.Value.Y);
+                if (StripAt.HasValue) lines.Add("stripAt=" + StripAt.Value.X + "," + StripAt.Value.Y);
+                File.WriteAllLines(file, lines);
             }
             catch (IOException) { }
         }
@@ -125,6 +140,15 @@ namespace ErrChatKeyboard
 
             panel.HotkeyWord = PickByNumber;
             panel.HotkeyApplyFix = ApplyFix;
+            panel.BadgePin = settings.BadgeAt;
+            panel.StripPin = settings.StripAt;
+            panel.Moved = () =>
+            {
+                settings.BadgeAt = panel.BadgePin;
+                settings.StripAt = panel.StripPin;
+                settings.Save();
+            };
+            panel.HideForBox = () => { dismissed = true; CancelAi(); panel.HidePanel(); };
             grammarTimer.Interval = GrammarDelayMs;
             grammarTimer.Tick += (s, e) => { grammarTimer.Stop(); StartGrammarCheck(); };
             saveTimer.Interval = LearnSaveMs;
@@ -174,6 +198,15 @@ namespace ErrChatKeyboard
         public void SavePrefs() { settings.Save(); }
         public bool StartsWithWindows { get { return ReadStartup(); } }
         public void ForgetLearnedWords() { predictor.ClearLearned(); }
+        public bool PositionIsCustom { get { return settings.BadgeAt.HasValue || settings.StripAt.HasValue; } }
+
+        public void ResetPosition()
+        {
+            settings.BadgeAt = null;
+            settings.StripAt = null;
+            settings.Save();
+            panel.ClearPins();
+        }
 
         public void SetPaused(bool value)
         {
@@ -325,6 +358,7 @@ namespace ErrChatKeyboard
         {
             CancelAi();
             grammarTimer.Stop();
+            panel.SetExpanded(false); // every box starts as the badge, so nothing covers its text
             elementKey = "";
             dismissed = false;
             fix = null;
@@ -397,7 +431,7 @@ namespace ErrChatKeyboard
                 else if (fix == null && snap.CheckText.Trim().Length > 0) first.Add(new Chip { Text = "Improve", Kind = ChipKind.Quiet, Icon = ChipIcon.Spark, Click = StartImprove });
             }
             if (statusNeedsSignIn) first.Add(new Chip { Text = "Sign in", Kind = ChipKind.Primary, Click = () => { Ai.OpenSignIn(settings.Provider); status = null; statusNeedsSignIn = false; } });
-            first.Add(new Chip { Text = "×", Kind = ChipKind.Close, Tip = "Hide for this box", Click = () => { dismissed = true; CancelAi(); panel.HidePanel(); } });
+            first.Add(new Chip { Text = "×", Kind = ChipKind.Close, Tip = "Close (Ctrl+Alt+Space)", Click = () => panel.SetExpanded(false) });
 
             var e = snap.ElementRect;
             var c = snap.CaretRect;
@@ -702,6 +736,7 @@ namespace ErrChatKeyboard
             if (args.Length > 0 && args[0] == "--selftest") return SelfTest.Run();
             if (args.Length > 1 && args[0] == "--preview") return SelfTest.Preview(args[1]);
             if (args.Length > 0 && args[0] == "--probe-chat") return SelfTest.ProbeChat();
+            if (args.Length > 0 && args[0] == "--check-panel") return SelfTest.CheckPanel();
             bool created;
             using (var mutex = new Mutex(true, "ErrChatKeyboard-single-instance", out created))
             {

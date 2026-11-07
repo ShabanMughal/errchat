@@ -10,9 +10,15 @@ API key to set up and no server in between.
 
 ## What it does
 
-A small strip appears just above the box you're typing in.
+A small badge sits in the corner of the box you're typing in, so it doesn't cover your
+text. It shows a number when replies or a fix are ready, a spinner while it's working and
+a warning if something went wrong. Click it, or press `Ctrl+Alt+Space`, to open the strip.
 
-| When | You see | Uses your plan? |
+Drag the badge or the strip to place it anywhere on screen, and it stays there. To put
+them back, use **Reset position** in Settings. Right-click the badge to hide it until you
+leave that box.
+
+| When | The strip shows | Uses your plan? |
 | --- | --- | --- |
 | Someone messages you in a chat app and your box is empty | 3 short replies written from their message | Yes, a little |
 | The box is empty anywhere else, or the last message is yours | **Smart replies**, to ask for replies | Only if you click it |
@@ -27,8 +33,9 @@ Click a suggestion, or use the keyboard. It never sends a message for you.
 
 | Keys | Action |
 | --- | --- |
-| `Alt+1`, `Alt+2`, `Alt+3` | Insert that suggestion |
+| `Alt+1`, `Alt+2`, `Alt+3` | Insert that suggestion, even with the strip closed |
 | `Ctrl+Alt+F` | Apply a grammar fix |
+| `Ctrl+Alt+Space` | Open or close the strip |
 
 The strip and the settings window follow your Windows light or dark mode.
 
@@ -107,6 +114,7 @@ That compiler only supports C# 5.
 powershell -ExecutionPolicy Bypass -File build.ps1
 dist\ErrChatKeyboard.exe --selftest          # logic checks: no AI calls, no UI
 dist\ErrChatKeyboard.exe --preview C:\shots  # saves images of every layout; never takes focus
+dist\ErrChatKeyboard.exe --check-panel       # clicks and drags a test badge with your mouse for a few seconds
 powershell -STA -ExecutionPolicy Bypass -File test\e2e.ps1   # real app and AI calls; takes over the keyboard for a few minutes
 ```
 

@@ -9,12 +9,12 @@ It has no server.
 | `src/Conversation.cs` | Reads the chat on screen and works out who said what. |
 | `src/Predictor.cs` | Offline word suggestions, typo fixes and learned words. |
 | `src/TextDiff.cs` | Finds which words a grammar fix changed, so the strip can mark them. |
-| `src/Panel.cs` | The floating strip, which never takes focus. Also the color theme. |
+| `src/Panel.cs` | The floating badge and strip, which never take focus. Also the color theme. |
 | `src/SettingsWindow.cs` | The settings window. |
 | `src/Typer.cs` | Types into the app in front with `SendInput`. |
 | `src/Ai.cs` | One-shot `claude -p` and `codex exec` calls with no tools. |
 | `src/Program.cs` | Decides what the strip shows; tray icon and saved settings. |
-| `src/SelfTest.cs` | `--selftest`, `--preview` and `--probe-chat`. |
+| `src/SelfTest.cs` | `--selftest`, `--preview`, `--check-panel` and `--probe-chat`. |
 
 ## Decisions that aren't obvious from the code
 
@@ -42,6 +42,10 @@ It has no server.
 - **The strip is drawn by hand.** It's a window with `WS_EX_NOACTIVATE` that answers
   `WM_MOUSEACTIVATE` with `MA_NOACTIVATE`, so a click can't move focus out of the other
   app. Real buttons would try to take focus.
+- **Every box starts as the badge.** The full strip covers what's around the box, so it only
+  opens when asked and closes again when focus moves to another box.
+- **Dragging follows the cursor on a timer.** A window that isn't in front only gets mouse
+  messages while the cursor is over it, so a fast drag would otherwise lose the window.
 - **Text uses `TextRenderer`, not GDI+.** Only native Windows text drawing falls back to
   Segoe UI Emoji, so emoji in a reply don't turn into empty boxes.
 - **The first run opens Settings.** Both automatic features send text by default, so people

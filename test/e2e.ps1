@@ -57,6 +57,8 @@ function Shot($name) {
 }
 # The strip's first chip sits at the same spot however many rows it has.
 function Click-FirstChip { $r = PanelRect; $s = [W]::GetDpiForWindow((Panel)) / 96.0; [W]::Click($r.L + [int](30 * $s), $r.T + [int](24 * $s)) }
+# Every box starts as the badge; the strip opens on request.
+function Open-Strip { $r = PanelRect; if (($r.R - $r.L) -lt 100) { Keys '^% '; Start-Sleep -Milliseconds 400 } }
 function Chips { if (Test-Path $trace) { try { Get-Content $trace -Raw -Encoding UTF8 -ErrorAction Stop } catch { '' } } else { '' } }
 function Replies { @((Chips) -split ' \| ' | Where-Object { $_ -and $_ -notmatch 'Smart replies|Reading the chat|Improve|Checking|^\S$' }) }
 function Clear-Box { Keys '^a'; Start-Sleep -Milliseconds 80; Keys '{DEL}'; Start-Sleep -Milliseconds 350 }
@@ -91,6 +93,13 @@ try {
   Check 'replies fit the chat' ($first -match 'cake|bring|party|coming|there|8|yes|sure|can') $first
   Check 'replies are short, like chips' (@(Replies | Where-Object { ($_ -split ' ').Count -gt 8 }).Count -eq 0) $first
   $reply1 = (Replies)[0]
+  $r = PanelRect
+  Check 'it starts as a small badge, with replies waiting' (($r.R - $r.L) -lt 100) "$($r.R - $r.L) wide"
+  Shot '1-badge'
+  Keys '^% '; Start-Sleep -Milliseconds 400
+  $r = PanelRect
+  Check 'Ctrl+Alt+Space opens the strip' (($r.R - $r.L) -ge 100) "$($r.R - $r.L) wide"
+  Check 'the shortcut keeps focus in the app' ([W]::GetForegroundWindow() -eq $script:win)
   # Hovering the close button shows its tip, without taking focus.
   $r = PanelRect; $s = [W]::GetDpiForWindow((Panel)) / 96.0
   [W]::SetCursorPos($r.R - [int](24 * $s), $r.T + [int](24 * $s)) | Out-Null
@@ -162,6 +171,7 @@ try {
   "== clicking Smart replies when the last message is mine"
   Clear-Box
   [void](WaitFor 5 { (Chips) -match '^\S*\s*Smart replies' })
+  Open-Strip
   Click-FirstChip
   # Chrome can leave a stray line break in a cleared box; that isn't typed text.
   Check 'clicking Smart replies types nothing' (((Field) -replace '\\n', '') -eq '') (Field)
