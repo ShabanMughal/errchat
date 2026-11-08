@@ -176,6 +176,8 @@ namespace ErrChatKeyboard
             {
                 // Shown once so people see what gets sent, and can turn it off, before it happens.
                 settings.Save();
+                // On by default so the app comes back after a restart; Settings can turn it off.
+                SetStartWithWindows(true);
                 ShowSettings();
             }
         }

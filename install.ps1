@@ -19,6 +19,11 @@ foreach ($folder in [Environment]::GetFolderPath('Programs'), [Environment]::Get
   $link.Save()
 }
 
+# Start with Windows (turn off in Settings > Start with Windows).
+$run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+New-Item -Path $run -Force | Out-Null
+Set-ItemProperty $run ErrChatKeyboard "`"$exe`""
+
 $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ErrChatKeyboard'
 New-Item -Path $key -Force | Out-Null
 Set-ItemProperty $key DisplayName $name
